@@ -689,64 +689,190 @@ function ContactsSection() {
 }
 
 // ==================== CART ====================
-function CartDrawer({ isOpen, onClose, cartItems, onRemove }: {
+function CartDrawer({ isOpen, onClose, cartItems, onRemove, onClear }: {
   isOpen: boolean;
   onClose: () => void;
   cartItems: number[];
   onRemove: (id: number) => void;
+  onClear: () => void;
 }) {
   const items = PRODUCTS.filter((p) => cartItems.includes(p.id));
   const total = items.reduce((sum, p) => sum + p.price, 0);
+  const [step, setStep] = useState<"cart" | "form" | "success">("cart");
+  const [name, setName] = useState("");
+  const [contact, setContact] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(false);
+
+  const handleOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !contact.trim()) return;
+    setSending(true);
+    setError(false);
+    try {
+      const res = await fetch("https://functions.poehali.dev/d0e40ab8-1410-4ed2-b21e-0aaaef021f36", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "order",
+          name,
+          contact,
+          items: items.map(({ brand, name, material, priceLabel }) => ({ brand, name, material, priceLabel })),
+          total: `${total.toLocaleString("ru-RU")} ₽`,
+        }),
+      });
+      if (res.ok) {
+        setStep("success");
+        onClear();
+        setName(""); setContact("");
+      } else {
+        setError(true);
+      }
+    } catch {
+      setError(true);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleClose = () => {
+    onClose();
+    setTimeout(() => setStep("cart"), 400);
+  };
 
   return (
     <>
-      {isOpen && <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40" onClick={onClose} />}
+      {isOpen && <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-40" onClick={handleClose} />}
       <div className={`fixed top-0 right-0 bottom-0 w-full max-w-md bg-card border-l border-border z-50 flex flex-col transform transition-transform duration-300 ${isOpen ? "translate-x-0" : "translate-x-full"}`}>
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="font-cormorant text-2xl font-light text-foreground">
-            Корзина <span className="text-gold">({items.length})</span>
+            {step === "cart" && <>Корзина <span className="text-gold">({items.length})</span></>}
+            {step === "form" && "Оформление заказа"}
+            {step === "success" && "Заказ принят"}
           </h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={handleClose} className="text-muted-foreground hover:text-foreground transition-colors">
             <Icon name="X" size={20} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {items.length === 0 ? (
-            <div className="text-center py-16">
-              <Icon name="ShoppingBag" size={40} className="text-muted-foreground mx-auto mb-4" />
-              <p className="font-cormorant text-xl text-muted-foreground">Корзина пуста</p>
-              <p className="font-ibm text-xs text-muted-foreground mt-2">Добавьте понравившиеся изделия</p>
-            </div>
-          ) : (
-            items.map((item) => (
-              <div key={item.id} className="flex gap-4">
-                <img src={item.image} alt={item.name} className="w-20 h-20 object-cover" />
-                <div className="flex-1">
-                  <p className="section-label text-[0.6rem] mb-0.5">{item.brand}</p>
-                  <p className="font-cormorant text-lg text-foreground">{item.name}</p>
-                  <p className="font-ibm text-xs text-muted-foreground">{item.material}</p>
-                  <p className="price-gold text-base mt-1">{item.priceLabel}</p>
+        {step === "cart" && (
+          <>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {items.length === 0 ? (
+                <div className="text-center py-16">
+                  <Icon name="ShoppingBag" size={40} className="text-muted-foreground mx-auto mb-4" />
+                  <p className="font-cormorant text-xl text-muted-foreground">Корзина пуста</p>
+                  <p className="font-ibm text-xs text-muted-foreground mt-2">Добавьте понравившиеся изделия</p>
                 </div>
-                <button onClick={() => onRemove(item.id)} className="text-muted-foreground hover:text-gold transition-colors self-start">
-                  <Icon name="X" size={14} />
+              ) : (
+                items.map((item) => (
+                  <div key={item.id} className="flex gap-4">
+                    <img src={item.image} alt={item.name} className="w-20 h-20 object-cover" />
+                    <div className="flex-1">
+                      <p className="section-label text-[0.6rem] mb-0.5">{item.brand}</p>
+                      <p className="font-cormorant text-lg text-foreground">{item.name}</p>
+                      <p className="font-ibm text-xs text-muted-foreground">{item.material}</p>
+                      <p className="price-gold text-base mt-1">{item.priceLabel}</p>
+                    </div>
+                    <button onClick={() => onRemove(item.id)} className="text-muted-foreground hover:text-gold transition-colors self-start">
+                      <Icon name="X" size={14} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+            {items.length > 0 && (
+              <div className="p-6 border-t border-border">
+                <div className="flex justify-between items-center mb-6">
+                  <span className="font-ibm text-sm text-muted-foreground">Итого:</span>
+                  <span className="price-gold text-xl">{total.toLocaleString("ru-RU")} ₽</span>
+                </div>
+                <button
+                  onClick={() => setStep("form")}
+                  className="w-full bg-gold text-background font-ibm text-xs tracking-[0.2em] uppercase py-4 hover:bg-gold/90 transition-colors"
+                >
+                  Оформить заказ
+                </button>
+                <button onClick={handleClose} className="w-full mt-3 border border-border text-muted-foreground font-ibm text-xs tracking-widest uppercase py-3 hover:border-gold hover:text-gold transition-colors">
+                  Продолжить покупки
                 </button>
               </div>
-            ))
-          )}
-        </div>
+            )}
+          </>
+        )}
 
-        {items.length > 0 && (
-          <div className="p-6 border-t border-border">
-            <div className="flex justify-between items-center mb-6">
-              <span className="font-ibm text-sm text-muted-foreground">Итого:</span>
-              <span className="price-gold text-xl">{total.toLocaleString("ru-RU")} ₽</span>
+        {step === "form" && (
+          <form onSubmit={handleOrder} className="flex flex-col flex-1">
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <div className="border border-border p-4 bg-background space-y-2 mb-2">
+                {items.map((item) => (
+                  <div key={item.id} className="flex justify-between items-center">
+                    <span className="font-cormorant text-base text-foreground">{item.brand} {item.name}</span>
+                    <span className="price-gold text-sm">{item.priceLabel}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center pt-2 border-t border-border">
+                  <span className="font-ibm text-xs text-muted-foreground uppercase tracking-widest">Итого</span>
+                  <span className="price-gold text-base">{total.toLocaleString("ru-RU")} ₽</span>
+                </div>
+              </div>
+              <div>
+                <label className="section-label text-[0.6rem] block mb-2">Ваше имя *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full bg-background border border-border text-foreground font-ibm text-sm px-4 py-3 outline-none focus:border-gold transition-colors placeholder:text-muted-foreground/50"
+                  placeholder="Анна Смирнова"
+                />
+              </div>
+              <div>
+                <label className="section-label text-[0.6rem] block mb-2">Телефон или email *</label>
+                <input
+                  type="text"
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  required
+                  className="w-full bg-background border border-border text-foreground font-ibm text-sm px-4 py-3 outline-none focus:border-gold transition-colors placeholder:text-muted-foreground/50"
+                  placeholder="+7 (___) ___-__-__"
+                />
+              </div>
+              {error && <p className="font-ibm text-xs text-red-400">Ошибка отправки. Попробуйте ещё раз.</p>}
             </div>
-            <button className="w-full bg-gold text-background font-ibm text-xs tracking-[0.2em] uppercase py-4 hover:bg-gold/90 transition-colors">
-              Оформить заказ
-            </button>
-            <button onClick={onClose} className="w-full mt-3 border border-border text-muted-foreground font-ibm text-xs tracking-widest uppercase py-3 hover:border-gold hover:text-gold transition-colors">
-              Продолжить покупки
+            <div className="p-6 border-t border-border space-y-3">
+              <button
+                type="submit"
+                disabled={sending}
+                className="w-full bg-gold text-background font-ibm text-xs tracking-[0.2em] uppercase py-4 hover:bg-gold/90 transition-colors disabled:opacity-60"
+              >
+                {sending ? "Отправка..." : "Подтвердить заказ"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStep("cart")}
+                className="w-full border border-border text-muted-foreground font-ibm text-xs tracking-widest uppercase py-3 hover:border-gold hover:text-gold transition-colors"
+              >
+                Назад
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === "success" && (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-16 h-16 border border-gold/40 flex items-center justify-center mb-6">
+              <Icon name="Check" size={28} className="text-gold" />
+            </div>
+            <p className="font-cormorant text-3xl text-foreground mb-3">Заказ оформлен</p>
+            <p className="font-ibm text-xs text-muted-foreground leading-relaxed max-w-xs">
+              Мы получили ваш заказ и свяжемся с вами в ближайшее время для подтверждения
+            </p>
+            <button
+              onClick={handleClose}
+              className="mt-8 bg-gold text-background font-ibm text-xs tracking-[0.2em] uppercase px-8 py-3 hover:bg-gold/90 transition-colors"
+            >
+              Закрыть
             </button>
           </div>
         )}
@@ -839,6 +965,10 @@ export default function Index() {
     setCartItems((prev) => prev.filter((item) => item !== id));
   };
 
+  const clearCart = () => {
+    setCartItems([]);
+  };
+
   return (
     <div className="grain">
       <Navbar activeSection={activeSection} onNav={handleNav} cartCount={cartItems.length} />
@@ -850,7 +980,7 @@ export default function Index() {
       <FaqSection />
       <ContactsSection />
       <Footer onNav={handleNav} />
-      <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} cartItems={cartItems} onRemove={removeFromCart} />
+      <CartDrawer isOpen={cartOpen} onClose={() => setCartOpen(false)} cartItems={cartItems} onRemove={removeFromCart} onClear={clearCart} />
     </div>
   );
 }
